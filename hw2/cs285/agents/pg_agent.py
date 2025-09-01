@@ -85,6 +85,8 @@ class PGAgent(nn.Module):
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
             # [x] TODO: perform `self.baseline_gradient_steps` updates to the critic/baseline network
+            for _ in range(self.baseline_gradient_steps):
+              self.critic.update(obs, q_values)
             critic_info: dict = self.critic.update(obs, q_values)
 
             info.update(critic_info)
@@ -162,7 +164,12 @@ class PGAgent(nn.Module):
         Note that all entries of the output list should be the exact same because each sum is from 0 to T (and doesn't
         involve t)!
         """
-        return np.array([np.sum([self.gamma ** t * r for t, r in enumerate(rewards)]) for _ in rewards])
+        return list(np.array([np.sum([self.gamma ** t * r for t, r in enumerate(rewards)]) for _ in rewards]))
+        # rewards = np.array(rewards)
+        # len_rewards = len(rewards)
+        # discount_factors = self.gamma ** np.arange(len_rewards)
+        # discounted_returns = np.full((len_rewards,), (np.sum(discount_factors * rewards)))
+        # return list(discounted_returns)
 
 
     def _discounted_reward_to_go(self, rewards: Sequence[float]) -> Sequence[float]:
@@ -170,4 +177,12 @@ class PGAgent(nn.Module):
         Helper function which takes a list of rewards {r_0, r_1, ..., r_t', ... r_T} and returns a list where the entry
         in each index t' is sum_{t'=t}^T gamma^(t'-t) * r_{t'}.
         """
-        return np.array([np.sum([self.gamma ** (t_ - t) * r for t_, r in enumerate(rewards[t:])]) for t in range(len(rewards))])
+        return list(np.array([np.sum([self.gamma ** t_ * r for t_, r in enumerate(rewards[t:])]) for t in range(len(rewards))]))
+        # discounted_reward_to_go = 0.0
+        # discounted_rewards_to_go = []
+        # for i in range(len(rewards) - 1, -1, -1):
+        #     discounted_reward_to_go = discounted_reward_to_go * self.gamma + rewards[i]
+        #     discounted_rewards_to_go.append(discounted_reward_to_go)
+        # discounted_rewards_to_go.reverse()
+        # import pdb; pdb.set_trace()
+        # return list(discounted_rewards_to_go)
