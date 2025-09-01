@@ -116,7 +116,7 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         """
         torch.save(self.state_dict(), filepath)
 
-    def forward(self, observation: torch.FloatTensor) -> Any:
+    def forward(self, observation: torch.FloatTensor) -> distributions.Distribution:
         """
         Defines the forward pass of the network
 
@@ -124,12 +124,18 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         :return:
             action: sampled action(s) from the policy
         """
-        # TODO: implement the forward pass of the network.
+        # [?] TODO: implement the forward pass of the network.
         # You can return anything you want, but you should be able to differentiate
         # through it. For example, you can return a torch.FloatTensor. You can also
         # return more flexible objects, such as a
         # `torch.distributions.Distribution` object. It's up to you!
-        raise NotImplementedError
+        # raise NotImplementedError
+        
+        # do i need to normalize the observation like expert policy does
+        
+        mean = self.mean_net(observation)
+        std = torch.exp(self.logstd)
+        return distributions.Normal(mean, std)
 
     def update(self, observations, actions):
         """
@@ -140,9 +146,28 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         :return:
             dict: 'Training Loss': supervised learning loss
         """
-        # TODO: update the policy and return the loss
-        loss = TODO
+        #[x] TODO: update the policy and return the loss
+        
+        # Convert inputs to torch tensors on the correct device
+        observations = ptu.from_numpy(observations)
+        actions = ptu.from_numpy(actions)
+
+        # Get the action distribution from the policy
+        dist = self.forward(observations)
+
+        # Negative log likelihood loss (MLE)
+        loss = -dist.log_prob(actions).mean()
+        
+        ## For debugging purpose
+        # if loss < 0: # continous variable, density can be < 0
+        #     import pdb; pdb.set_trace()
+
+        # Optimize
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
         return {
             # You can add extra logging information here, but keep this line
-            'Training Loss': ptu.to_numpy(loss),
+            'Training_Loss': ptu.to_numpy(loss),
         }

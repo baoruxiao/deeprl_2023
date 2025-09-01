@@ -60,3 +60,7 @@ class ReplayBuffer(object):
                 [self.terminals, terminals]
             )[-self.max_size:]
 
+    def sample(self, batch_size):
+        idxs = np.random.permutation(len(self.obs))[:batch_size]
+        return self.obs[idxs], self.acs[idxs]
+        
