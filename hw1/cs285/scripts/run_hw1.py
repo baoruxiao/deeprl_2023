@@ -84,7 +84,7 @@ def run_training_loop(params):
     ## AGENT
     #############
 
-    # TODO: Implement missing functions in this class.
+    # [x] TODO: Implement missing functions in this class.
     actor = MLPPolicySL(
         ac_dim,
         ob_dim,
@@ -112,12 +112,36 @@ def run_training_loop(params):
     # init vars at beginning of training
     total_envsteps = 0
     start_time = time.time()
+    
+    if log_metrics:
+        print("\n\n********** Baseline ************")
+    
+        paths = pickle.load(open(params['expert_data'], 'rb'))
+        envsteps_this_batch = 0
+
+        # save eval metrics
+        print("\nCollecting data for eval...")
+        eval_paths, eval_envsteps_this_batch = utils.sample_trajectories(
+            env, actor, params['eval_batch_size'], params['ep_len'])
+
+        logs = utils.compute_metrics(paths, eval_paths)
+        # compute additional metrics
+        logs["Train_EnvstepsSoFar"] = total_envsteps
+        logs["TimeSinceStart"] = time.time() - start_time
+
+        # perform the logging
+        for key, value in logs.items():
+            print('{} : {}'.format(key, value))
+            logger.log_scalar(value, key, -1)
+        print('Done logging...\n\n')
+
+        logger.flush()
 
     for itr in range(params['n_iter']):
         print("\n\n********** Iteration %i ************"%itr)
 
         # decide if videos should be rendered/logged at this iteration
-        log_video = ((itr % params['video_log_freq'] == 0) and (params['video_log_freq'] != -1))
+        log_video = itr > 0 and ((itr % params['video_log_freq'] == 0) and (params['video_log_freq'] != -1))
         # decide if metrics should be logged
         log_metrics = (itr % params['scalar_log_freq'] == 0)
 
@@ -129,19 +153,24 @@ def run_training_loop(params):
         else:
             # DAGGER training from sampled data relabeled by expert
             assert params['do_dagger']
-            # TODO: collect `params['batch_size']` transitions
+            # [x] TODO: collect `params['batch_size']` transitions
             # HINT: use utils.sample_trajectories
-            # TODO: implement missing parts of utils.sample_trajectory
-            paths, envsteps_this_batch = TODO
+            # [x] TODO: implement missing parts of utils.sample_trajectory
+            paths, envsteps_this_batch = utils.sample_trajectories(
+                env, actor, params['batch_size'], params['ep_len']
+            )
 
             # relabel the collected obs with actions from a provided expert policy
             if params['do_dagger']:
                 print("\nRelabelling collected observations with labels from an expert policy...")
 
-                # TODO: relabel collected obsevations (from our policy) with labels from expert policy
+                # [x] TODO: relabel collected obsevations (from our policy) with labels from expert policy
                 # HINT: query the policy (using the get_action function) with paths[i]["observation"]
                 # and replace paths[i]["action"] with these expert labels
-                paths = TODO
+                for path in paths:
+                    obs_tensor = ptu.from_numpy(path['observation'])
+                    actions = expert_policy.forward(obs_tensor)
+                    path['action'] = actions.cpu().detach().numpy()
 
         total_envsteps += envsteps_this_batch
         # add collected data to replay buffer
@@ -152,15 +181,16 @@ def run_training_loop(params):
         training_logs = []
         for _ in range(params['num_agent_train_steps_per_iter']):
 
-          # TODO: sample some data from replay_buffer
+          # [x] TODO: sample some data from replay_buffer
           # HINT1: how much data = params['train_batch_size']
           # HINT2: use np.random.permutation to sample random indices
           # HINT3: return corresponding data points from each array (i.e., not different indices from each array)
           # for imitation learning, we only need observations and actions.  
-          ob_batch, ac_batch = TODO
+          batch_size = params['train_batch_size']
+          ob_batch, ac_batch = replay_buffer.sample(batch_size)
 
           # use the sampled data to train an agent
-          train_log = actor.update(ob_batch, ac_batch)
+          train_log = actor.update(ob_batch, ac_batch)              
           training_logs.append(train_log)
 
         # log/save
@@ -179,6 +209,7 @@ def run_training_loop(params):
                     max_videos_to_save=MAX_NVIDEO,
                     video_title='eval_rollouts')
 
+        
         if log_metrics:
             # save eval metrics
             print("\nCollecting data for eval...")
@@ -188,6 +219,7 @@ def run_training_loop(params):
             logs = utils.compute_metrics(paths, eval_paths)
             # compute additional metrics
             logs.update(training_logs[-1]) # Only use the last log for now
+            
             logs["Train_EnvstepsSoFar"] = total_envsteps
             logs["TimeSinceStart"] = time.time() - start_time
             if itr == 0:
